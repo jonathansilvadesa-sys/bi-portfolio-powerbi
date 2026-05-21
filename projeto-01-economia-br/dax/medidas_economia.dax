@@ -1,0 +1,264 @@
+// ============================================================
+// PROJETO 01 — DASHBOARD ECONÔMICO BRASIL
+// Arquivo: medidas_economia.dax
+// Autor: Jonathan Silva de Sá
+// Descrição: Medidas DAX para análise de indicadores macroeconômicos
+//            (IPCA, SELIC, PIB, Desemprego)
+// ============================================================
+
+
+// ────────────────────────────────────────────────────────────
+// TABELA: Medidas Base
+// ────────────────────────────────────────────────────────────
+
+[IPCA Mensal %] =
+SELECTEDVALUE(fIndicadores[valor], BLANK())
+
+
+[IPCA Acumulado Ano] =
+CALCULATE(
+    SUMX(
+        VALUES(dCalendario[Ano]),
+        VAR TaxaMensal = [IPCA Mensal %] / 100
+        RETURN (1 + TaxaMensal) - 1
+    ) * 100,
+    fIndicadores[indicador] = "IPCA",
+    dCalendario[Ano] = MAX(dCalendario[Ano])
+)
+// Nota: Para precisão máxima, usar produtório acumulado via PRODUCTX
+
+
+[IPCA 12 Meses Acumulado] =
+VAR UltimoMes = MAX(dCalendario[Data])
+VAR InicioJanela = EDATE(UltimoMes, -11)
+RETURN
+CALCULATE(
+    // Produtório: (1+i1)*(1+i2)*...*(1+i12) - 1
+    PRODUCTX(
+        FILTER(fIndicadores,
+               fIndicadores[indicador] = "IPCA" &&
+               fIndicadores[data] >= InicioJanela &&
+               fIndicadores[data] <= UltimoMes),
+        1 + fIndicadores[valor] / 100
+    ) - 1,
+    ALL(dCalendario)
+) * 100
+
+
+[SELIC % a.a.] =
+CALCULATE(
+    LASTNONBLANK(fIndicadores[valor], 1),
+    fIndicadores[indicador] = "SELIC"
+)
+
+
+[SELIC Real (deflacionada)] =
+VAR SelicNominal = [SELIC % a.a.]
+VAR InflacaoAnual = [IPCA 12 Meses Acumulado]
+RETURN
+IF(
+    NOT ISBLANK(SelicNominal) && NOT ISBLANK(InflacaoAnual),
+    ROUND(((1 + SelicNominal/100) / (1 + InflacaoAnual/100) - 1) * 100, 2),
+    BLANK()
+)
+
+
+[Taxa Desemprego %] =
+CALCULATE(
+    AVERAGE(fIndicadores[valor]),
+    fIndicadores[indicador] = "DESEMPREGO"
+)
+
+
+[PIB Variação Trimestral %] =
+CALCULATE(
+    AVERAGE(fIndicadores[valor]),
+    fIndicadores[indicador] = "PIB_VARIACAO_TRI"
+)
+
+
+// ────────────────────────────────────────────────────────────
+// COMPARATIVOS TEMPORAIS (YoY / MoM)
+// ────────────────────────────────────────────────────────────
+
+[IPCA MoM Variação pp] =
+VAR AtualMes = [IPCA Mensal %]
+VAR MesAnterior =
+    CALCULATE(
+        [IPCA Mensal %],
+        DATEADD(dCalendario[Data], -1, MONTH)
+    )
+RETURN
+IF(
+    NOT ISBLANK(AtualMes) && NOT ISBLANK(MesAnterior),
+    AtualMes - MesAnterior,
+    BLANK()
+)
+
+
+[IPCA YoY Variação pp] =
+VAR AtualMes = [IPCA Mensal %]
+VAR MesmoMesAnoAnterior =
+    CALCULATE(
+        [IPCA Mensal %],
+        SAMEPERIODLASTYEAR(dCalendario[Data])
+    )
+RETURN
+IF(
+    NOT ISBLANK(AtualMes) && NOT ISBLANK(MesmoMesAnoAnterior),
+    AtualMes - MesmoMesAnoAnterior,
+    BLANK()
+)
+
+
+[Desemprego YoY pp] =
+VAR Atual = [Taxa Desemprego %]
+VAR AnoAnterior =
+    CALCULATE(
+        [Taxa Desemprego %],
+        SAMEPERIODLASTYEAR(dCalendario[Data])
+    )
+RETURN
+Atual - AnoAnterior
+
+
+[PIB YoY %] =
+VAR Atual = [PIB Variação Trimestral %]
+VAR AnoAnterior =
+    CALCULATE(
+        [PIB Variação Trimestral %],
+        SAMEPERIODLASTYEAR(dCalendario[Data])
+    )
+RETURN
+IF(
+    NOT ISBLANK(Atual) && NOT ISBLANK(AnoAnterior),
+    Atual - AnoAnterior,
+    BLANK()
+)
+
+
+// ────────────────────────────────────────────────────────────
+// MOVING AVERAGES
+// ────────────────────────────────────────────────────────────
+
+[IPCA Média Móvel 3M] =
+CALCULATE(
+    AVERAGEX(
+        DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -3, MONTH),
+        [IPCA Mensal %]
+    ),
+    fIndicadores[indicador] = "IPCA"
+)
+
+
+[IPCA Média Móvel 12M] =
+CALCULATE(
+    AVERAGEX(
+        DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -12, MONTH),
+        [IPCA Mensal %]
+    ),
+    fIndicadores[indicador] = "IPCA"
+)
+
+
+[Desemprego Média Móvel 4T] =
+AVERAGEX(
+    DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -4, QUARTER),
+    [Taxa Desemprego %]
+)
+
+
+// ────────────────────────────────────────────────────────────
+// SEMÁFORO / STATUS (para KPI Cards)
+// ────────────────────────────────────────────────────────────
+
+[Status IPCA] =
+VAR IPCA = [IPCA Mensal %]
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(IPCA),          "–",
+    IPCA <= 0.3,            "🟢 Controlado",
+    IPCA <= 0.6,            "🟡 Atenção",
+    IPCA <= 1.0,            "🟠 Elevado",
+    /* else */              "🔴 Crítico"
+)
+
+
+[Cor IPCA] =
+VAR IPCA = [IPCA Mensal %]
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(IPCA),  "#CCCCCC",
+    IPCA <= 0.3,    "#22C55E",
+    IPCA <= 0.6,    "#F59E0B",
+    IPCA <= 1.0,    "#F97316",
+    /* else */      "#EF4444"
+)
+
+
+[Status Desemprego] =
+VAR Taxa = [Taxa Desemprego %]
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(Taxa),  "–",
+    Taxa <= 7,      "🟢 Baixo",
+    Taxa <= 10,     "🟡 Moderado",
+    Taxa <= 13,     "🟠 Alto",
+    /* else */      "🔴 Muito Alto"
+)
+
+
+// ────────────────────────────────────────────────────────────
+// TEXTO DINÂMICO (para subtítulos dos visuais)
+// ────────────────────────────────────────────────────────────
+
+[Label Período Selecionado] =
+VAR DataMin = FORMAT(MIN(dCalendario[Data]), "mmm/yyyy", "pt-BR")
+VAR DataMax = FORMAT(MAX(dCalendario[Data]), "mmm/yyyy", "pt-BR")
+RETURN
+"Período: " & DataMin & " a " & DataMax
+
+
+[Label IPCA Acumulado Card] =
+VAR Acum = [IPCA 12 Meses Acumulado]
+RETURN
+IF(
+    NOT ISBLANK(Acum),
+    FORMAT(Acum, "0.00") & "% nos últimos 12 meses",
+    "Sem dados"
+)
+
+
+[Último Dado Disponível] =
+FORMAT(
+    CALCULATE(MAX(fIndicadores[data]), ALL(dCalendario)),
+    "dd/mm/yyyy",
+    "pt-BR"
+)
+
+
+// ────────────────────────────────────────────────────────────
+// TABELA DE CALENDÁRIO (criar como tabela calculada)
+// ────────────────────────────────────────────────────────────
+/*
+dCalendario =
+VAR DataInicio = DATE(2019, 1, 1)
+VAR DataFim    = TODAY()
+RETURN
+ADDCOLUMNS(
+    CALENDAR(DataInicio, DataFim),
+    "Ano",            YEAR([Date]),
+    "Mês Num",        MONTH([Date]),
+    "Nome Mês",       FORMAT([Date], "mmm", "pt-BR"),
+    "Nome Mês Longo", FORMAT([Date], "mmmm", "pt-BR"),
+    "Trimestre",      "T" & QUARTER([Date]),
+    "Semestre",       IF(MONTH([Date]) <= 6, "S1", "S2"),
+    "Ano-Mês",        FORMAT([Date], "yyyy-mm"),
+    "Ano Trim",       YEAR([Date]) & " T" & QUARTER([Date]),
+    "Dia Semana",     WEEKDAY([Date], 2),  // 1=Seg, 7=Dom
+    "É Fim Semana",   WEEKDAY([Date], 2) >= 6
+)
+*/

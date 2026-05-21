@@ -1,0 +1,259 @@
+// ============================================================
+// PROJETO 02 — RH & MERCADO DE TRABALHO
+// Arquivo: medidas_rh.dax
+// Descrição: Medidas DAX para análise de empregabilidade CAGED
+// Autor: Jonathan Silva de Sá
+// ============================================================
+
+
+// ────────────────────────────────────────────────────────────
+// MEDIDAS BASE
+// ────────────────────────────────────────────────────────────
+
+[Total Admissões] =
+CALCULATE(
+    COUNTROWS(fCaged),
+    fCaged[tipo_movimentacao] = 1
+)
+
+
+[Total Desligamentos] =
+CALCULATE(
+    COUNTROWS(fCaged),
+    fCaged[tipo_movimentacao] = 2
+)
+
+
+[Saldo de Empregos] =
+[Total Admissões] - [Total Desligamentos]
+
+
+[Salário Médio] =
+CALCULATE(
+    AVERAGEX(
+        FILTER(fCaged, fCaged[salario_fixo] > 0),
+        fCaged[salario_fixo]
+    )
+)
+
+
+[Estoque Médio] =
+DIVIDE([Total Admissões] + [Total Desligamentos], 2)
+
+
+// ────────────────────────────────────────────────────────────
+// TAXA DE ROTATIVIDADE
+// Fórmula: desligamentos / estoque_médio * 100
+// ────────────────────────────────────────────────────────────
+
+[Taxa Rotatividade %] =
+VAR Deslig  = [Total Desligamentos]
+VAR Estoque = [Estoque Médio]
+RETURN
+IF(
+    Estoque > 0,
+    ROUND(DIVIDE(Deslig, Estoque) * 100, 2),
+    BLANK()
+)
+
+
+// ────────────────────────────────────────────────────────────
+// COMPARATIVOS TEMPORAIS
+// ────────────────────────────────────────────────────────────
+
+[Saldo MoM Variação] =
+VAR SaldoAtual = [Saldo de Empregos]
+VAR SaldoAnterior =
+    CALCULATE(
+        [Saldo de Empregos],
+        DATEADD(dCalendario[Data], -1, MONTH)
+    )
+RETURN
+IF(
+    NOT ISBLANK(SaldoAnterior),
+    SaldoAtual - SaldoAnterior,
+    BLANK()
+)
+
+
+[Saldo YoY Variação] =
+VAR SaldoAtual = [Saldo de Empregos]
+VAR SaldoAnoAnterior =
+    CALCULATE(
+        [Saldo de Empregos],
+        SAMEPERIODLASTYEAR(dCalendario[Data])
+    )
+RETURN
+IF(
+    NOT ISBLANK(SaldoAnoAnterior),
+    SaldoAtual - SaldoAnoAnterior,
+    BLANK()
+)
+
+
+[Saldo YoY %] =
+VAR Atual    = [Saldo de Empregos]
+VAR Anterior = CALCULATE([Saldo de Empregos], SAMEPERIODLASTYEAR(dCalendario[Data]))
+RETURN
+DIVIDE(Atual - Anterior, ABS(Anterior))
+
+
+[Saldo Acumulado Ano] =
+CALCULATE(
+    [Saldo de Empregos],
+    DATESYTD(dCalendario[Data])
+)
+
+
+// ────────────────────────────────────────────────────────────
+// MOVING AVERAGES (sazonalidade)
+// ────────────────────────────────────────────────────────────
+
+[Admissões MA3M] =
+AVERAGEX(
+    DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -3, MONTH),
+    [Total Admissões]
+)
+
+
+[Saldo MA3M] =
+AVERAGEX(
+    DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -3, MONTH),
+    [Saldo de Empregos]
+)
+
+
+// ────────────────────────────────────────────────────────────
+// ANÁLISE DE SAZONALIDADE
+// (índice sazonal: valor do mês / média do mês em todos os anos)
+// ────────────────────────────────────────────────────────────
+
+[Índice Sazonal Admissões] =
+VAR MesAtual   = SELECTEDVALUE(dCalendario[Mês Num])
+VAR AdmMes     = [Total Admissões]
+VAR MediaMes   =
+    CALCULATE(
+        AVERAGEX(
+            VALUES(dCalendario[Ano]),
+            [Total Admissões]
+        ),
+        FILTER(ALL(dCalendario), dCalendario[Mês Num] = MesAtual)
+    )
+RETURN
+IF(
+    MediaMes > 0,
+    ROUND(DIVIDE(AdmMes, MediaMes), 4),
+    BLANK()
+)
+
+
+// ────────────────────────────────────────────────────────────
+// RANKING DINÂMICO
+// ────────────────────────────────────────────────────────────
+
+[Ranking UF por Saldo] =
+RANKX(
+    ALLSELECTED(dLocalidade[UF]),
+    [Saldo de Empregos],
+    ,
+    DESC,
+    DENSE
+)
+
+
+[Ranking Setor por Admissões] =
+RANKX(
+    ALLSELECTED(dSetor[Nome Setor]),
+    [Total Admissões],
+    ,
+    DESC,
+    DENSE
+)
+
+
+// ────────────────────────────────────────────────────────────
+// PARTICIPAÇÃO DE MERCADO
+// ────────────────────────────────────────────────────────────
+
+[% Participação Admissões] =
+DIVIDE(
+    [Total Admissões],
+    CALCULATE([Total Admissões], ALLSELECTED(dSetor[Nome Setor]))
+)
+
+
+[% Participação UF] =
+DIVIDE(
+    [Saldo de Empregos],
+    CALCULATE([Saldo de Empregos], ALLSELECTED(dLocalidade[UF]))
+)
+
+
+// ────────────────────────────────────────────────────────────
+// CARDS E KPIs
+// ────────────────────────────────────────────────────────────
+
+[Status Saldo Mensal] =
+VAR Saldo = [Saldo de Empregos]
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(Saldo),     "–",
+    Saldo > 200000,     "🟢 Forte Geração",
+    Saldo > 0,          "🟡 Geração Moderada",
+    Saldo = 0,          "⚪ Neutro",
+    Saldo > -100000,    "🟠 Leve Retração",
+    /* else */          "🔴 Retração Forte"
+)
+
+
+[Label Saldo Card] =
+VAR Saldo = [Saldo de Empregos]
+VAR Sinal = IF(Saldo >= 0, "+", "")
+RETURN
+Sinal & FORMAT(Saldo, "#,##0") & " empregos"
+
+
+[Label Período RH] =
+"CAGED " &
+FORMAT(MIN(dCalendario[Data]), "mmm/yyyy", "pt-BR") &
+" a " &
+FORMAT(MAX(dCalendario[Data]), "mmm/yyyy", "pt-BR")
+
+
+// ────────────────────────────────────────────────────────────
+// ANÁLISE DE SALÁRIOS
+// ────────────────────────────────────────────────────────────
+
+[Salário Mediana] =
+MEDIANX(
+    FILTER(fCaged, fCaged[salario_fixo] > 0),
+    fCaged[salario_fixo]
+)
+
+
+[Salário P90] =
+PERCENTILEX.INC(
+    FILTER(fCaged, fCaged[salario_fixo] > 0),
+    fCaged[salario_fixo],
+    0.90
+)
+
+
+[Premium Salário Superior vs Fundamental] =
+VAR SalarioSuperior =
+    CALCULATE(
+        [Salário Médio],
+        fCaged[grau_instrucao_grupo] = "Superior Completo"
+    )
+VAR SalarioFundamental =
+    CALCULATE(
+        [Salário Médio],
+        fCaged[grau_instrucao_grupo] = "Fundamental Incompleto ou menos"
+    )
+RETURN
+IF(
+    SalarioFundamental > 0,
+    ROUND(SalarioSuperior / SalarioFundamental, 2),
+    BLANK()
+)

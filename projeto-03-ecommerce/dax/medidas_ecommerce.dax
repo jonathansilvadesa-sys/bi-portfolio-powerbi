@@ -1,0 +1,205 @@
+// ============================================================
+// PROJETO 03 — E-COMMERCE (Dataset Olist)
+// Arquivo: medidas_ecommerce.dax
+// Descrição: Medidas de performance de vendas, logística e satisfação
+// Autor: Jonathan Silva de Sá
+// ============================================================
+
+
+// ────────────────────────────────────────────────────────────
+// RECEITA & VOLUME
+// ────────────────────────────────────────────────────────────
+
+[Receita Total] =
+CALCULATE(
+    SUMX(fItens, fItens[valor_item] + fItens[frete_valor]),
+    fPedidos[status_pedido] = "delivered"
+)
+
+
+[Nº Pedidos] =
+CALCULATE(
+    DISTINCTCOUNT(fPedidos[id_pedido]),
+    fPedidos[status_pedido] = "delivered"
+)
+
+
+[Nº Clientes Únicos] =
+DISTINCTCOUNT(fPedidos[id_cliente])
+
+
+[Ticket Médio] =
+DIVIDE([Receita Total], [Nº Pedidos])
+
+
+[Itens por Pedido] =
+DIVIDE(
+    CALCULATE(COUNTROWS(fItens), fPedidos[status_pedido] = "delivered"),
+    [Nº Pedidos]
+)
+
+
+// ────────────────────────────────────────────────────────────
+// COMPARATIVOS TEMPORAIS
+// ────────────────────────────────────────────────────────────
+
+[Receita MoM %] =
+VAR Atual    = [Receita Total]
+VAR Anterior = CALCULATE([Receita Total], DATEADD(dCalendario[Data], -1, MONTH))
+RETURN
+DIVIDE(Atual - Anterior, ABS(Anterior))
+
+
+[Receita YoY %] =
+VAR Atual    = [Receita Total]
+VAR Anterior = CALCULATE([Receita Total], SAMEPERIODLASTYEAR(dCalendario[Data]))
+RETURN
+DIVIDE(Atual - Anterior, ABS(Anterior))
+
+
+[Pedidos MoM %] =
+VAR Atual    = [Nº Pedidos]
+VAR Anterior = CALCULATE([Nº Pedidos], DATEADD(dCalendario[Data], -1, MONTH))
+RETURN
+DIVIDE(Atual - Anterior, ABS(Anterior))
+
+
+[Receita Acumulada Ano] =
+CALCULATE([Receita Total], DATESYTD(dCalendario[Data]))
+
+
+[Receita MA3M] =
+AVERAGEX(
+    DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -3, MONTH),
+    [Receita Total]
+)
+
+
+// ────────────────────────────────────────────────────────────
+// MARKET SHARE POR CATEGORIA
+// ────────────────────────────────────────────────────────────
+
+[% Market Share Categoria] =
+DIVIDE(
+    [Receita Total],
+    CALCULATE([Receita Total], ALLSELECTED(dProduto[Categoria]))
+)
+
+
+[Ranking Categoria] =
+RANKX(
+    ALLSELECTED(dProduto[Categoria]),
+    [Receita Total],
+    ,
+    DESC,
+    DENSE
+)
+
+
+// ────────────────────────────────────────────────────────────
+// LOGÍSTICA E ENTREGA
+// ────────────────────────────────────────────────────────────
+
+[Prazo Médio Entrega (dias)] =
+AVERAGEX(
+    FILTER(
+        fPedidos,
+        NOT ISBLANK(fPedidos[data_entrega]) &&
+        fPedidos[status_pedido] = "delivered"
+    ),
+    INT(fPedidos[data_entrega] - fPedidos[data_pedido])
+)
+
+
+[Prazo Prometido Médio (dias)] =
+AVERAGEX(
+    FILTER(fPedidos, NOT ISBLANK(fPedidos[data_estimada_entrega])),
+    INT(fPedidos[data_estimada_entrega] - fPedidos[data_pedido])
+)
+
+
+[% Entregas no Prazo] =
+VAR EntregasNoPrazo =
+    CALCULATE(
+        COUNTROWS(fPedidos),
+        fPedidos[status_pedido] = "delivered",
+        fPedidos[data_entrega] <= fPedidos[data_estimada_entrega]
+    )
+VAR TotalEntregues =
+    CALCULATE(COUNTROWS(fPedidos), fPedidos[status_pedido] = "delivered")
+RETURN
+DIVIDE(EntregasNoPrazo, TotalEntregues)
+
+
+[Atraso Médio (dias)] =
+AVERAGEX(
+    FILTER(
+        fPedidos,
+        fPedidos[status_pedido] = "delivered" &&
+        fPedidos[data_entrega] > fPedidos[data_estimada_entrega]
+    ),
+    INT(fPedidos[data_entrega] - fPedidos[data_estimada_entrega])
+)
+
+
+// ────────────────────────────────────────────────────────────
+// SATISFAÇÃO (NPS / Review Score)
+// ────────────────────────────────────────────────────────────
+
+[Nota Média Avaliação] =
+AVERAGE(fAvaliacoes[nota])
+
+
+[% Avaliações 5 Estrelas] =
+DIVIDE(
+    CALCULATE(COUNTROWS(fAvaliacoes), fAvaliacoes[nota] = 5),
+    COUNTROWS(fAvaliacoes)
+)
+
+
+[% Avaliações 1-2 Estrelas] =
+DIVIDE(
+    CALCULATE(COUNTROWS(fAvaliacoes), fAvaliacoes[nota] <= 2),
+    COUNTROWS(fAvaliacoes)
+)
+
+
+[NPS Score Aproximado] =
+// NPS = % Promotores (nota 5) - % Detratores (notas 1-2)
+VAR PctPromotor  = [% Avaliações 5 Estrelas]
+VAR PctDetrator  = [% Avaliações 1-2 Estrelas]
+RETURN
+ROUND((PctPromotor - PctDetrator) * 100, 1)
+
+
+// ────────────────────────────────────────────────────────────
+// CORRELAÇÃO PRAZO × SATISFAÇÃO (tabela para scatter plot)
+// ────────────────────────────────────────────────────────────
+
+[Prazo Entrega para Scatter] =
+AVERAGEX(
+    FILTER(
+        fPedidos,
+        fPedidos[status_pedido] = "delivered"
+    ),
+    INT(fPedidos[data_entrega] - fPedidos[data_pedido])
+)
+
+
+// ────────────────────────────────────────────────────────────
+// TEXTOS DINÂMICOS
+// ────────────────────────────────────────────────────────────
+
+[Label Receita Card] =
+"R$ " & FORMAT([Receita Total] / 1000000, "#,##0.0") & "M"
+
+
+[Label MoM Receita] =
+VAR Var = [Receita MoM %]
+VAR Sinal = IF(Var >= 0, "▲ +", "▼ ")
+RETURN
+IF(NOT ISBLANK(Var), Sinal & FORMAT(ABS(Var), "0.0%") & " vs mês anterior", "")
+
+
+[Label Prazo Entrega] =
+FORMAT([Prazo Médio Entrega (dias)], "0.0") & " dias em média"

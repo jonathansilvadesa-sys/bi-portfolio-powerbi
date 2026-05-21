@@ -1,0 +1,204 @@
+// ============================================================
+// PROJETO 03 — E-COMMERCE (Dataset Olist)
+// Arquivo: rfm_analysis.dax
+// Descrição: Análise RFM completa em DAX
+//            R = Recência (quando comprou pela última vez)
+//            F = Frequência (quantas vezes comprou)
+//            M = Monetário (quanto gastou no total)
+// Dataset: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+// Autor: Jonathan Silva de Sá
+// ============================================================
+
+
+// ────────────────────────────────────────────────────────────
+// DATA DE REFERÊNCIA (âncora para calcular recência)
+// ────────────────────────────────────────────────────────────
+
+[Data Referência RFM] =
+// Última data de pedido no dataset + 1 dia
+CALCULATE(
+    MAX(fPedidos[data_pedido]) + 1,
+    ALL(fPedidos)
+)
+
+
+// ────────────────────────────────────────────────────────────
+// MÉTRICAS RFM BRUTAS (por cliente)
+// ────────────────────────────────────────────────────────────
+
+[R — Dias desde última compra] =
+VAR DataRef = [Data Referência RFM]
+VAR UltimaCompra =
+    CALCULATE(
+        MAX(fPedidos[data_pedido]),
+        fPedidos[status_pedido] = "delivered"
+    )
+RETURN
+IF(
+    NOT ISBLANK(UltimaCompra),
+    INT(DataRef - UltimaCompra),
+    BLANK()
+)
+
+
+[F — Nº de Pedidos] =
+CALCULATE(
+    DISTINCTCOUNT(fPedidos[id_pedido]),
+    fPedidos[status_pedido] = "delivered"
+)
+
+
+[M — Receita Total] =
+CALCULATE(
+    SUM(fItens[valor_item]) + SUM(fPedidos[frete_valor]),
+    fPedidos[status_pedido] = "delivered"
+)
+
+
+[M — Ticket Médio] =
+DIVIDE([M — Receita Total], [F — Nº de Pedidos])
+
+
+// ────────────────────────────────────────────────────────────
+// SCORES RFM (1 a 5 — usando PERCENTILEINC por quartil)
+// Estratégia: dividir em quintis por PERCENTILEX
+// ────────────────────────────────────────────────────────────
+
+[Score R (1-5)] =
+// Quanto MENOR a recência, MELHOR (score 5)
+VAR Recencia = [R — Dias desde última compra]
+VAR P20 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [R — Dias desde última compra], 0.20)
+VAR P40 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [R — Dias desde última compra], 0.40)
+VAR P60 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [R — Dias desde última compra], 0.60)
+VAR P80 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [R — Dias desde última compra], 0.80)
+RETURN
+IF(
+    NOT ISBLANK(Recencia),
+    SWITCH(
+        TRUE(),
+        Recencia <= P20, 5,
+        Recencia <= P40, 4,
+        Recencia <= P60, 3,
+        Recencia <= P80, 2,
+        1
+    ),
+    BLANK()
+)
+
+
+[Score F (1-5)] =
+// Quanto MAIOR a frequência, MELHOR (score 5)
+VAR Freq = [F — Nº de Pedidos]
+VAR P20 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [F — Nº de Pedidos], 0.20)
+VAR P40 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [F — Nº de Pedidos], 0.40)
+VAR P60 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [F — Nº de Pedidos], 0.60)
+VAR P80 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [F — Nº de Pedidos], 0.80)
+RETURN
+IF(
+    NOT ISBLANK(Freq),
+    SWITCH(
+        TRUE(),
+        Freq >= P80, 5,
+        Freq >= P60, 4,
+        Freq >= P40, 3,
+        Freq >= P20, 2,
+        1
+    ),
+    BLANK()
+)
+
+
+[Score M (1-5)] =
+// Quanto MAIOR o monetário, MELHOR (score 5)
+VAR Monetario = [M — Receita Total]
+VAR P20 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [M — Receita Total], 0.20)
+VAR P40 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [M — Receita Total], 0.40)
+VAR P60 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [M — Receita Total], 0.60)
+VAR P80 = PERCENTILEX.INC(ALL(dClientes[id_cliente]), [M — Receita Total], 0.80)
+RETURN
+IF(
+    NOT ISBLANK(Monetario),
+    SWITCH(
+        TRUE(),
+        Monetario >= P80, 5,
+        Monetario >= P60, 4,
+        Monetario >= P40, 3,
+        Monetario >= P20, 2,
+        1
+    ),
+    BLANK()
+)
+
+
+// ────────────────────────────────────────────────────────────
+// SCORE RFM COMPOSTO E SEGMENTAÇÃO
+// ────────────────────────────────────────────────────────────
+
+[Score RFM Composto] =
+// Média ponderada: R=40%, F=30%, M=30%
+VAR R = [Score R (1-5)]
+VAR F = [Score F (1-5)]
+VAR M = [Score M (1-5)]
+RETURN
+IF(
+    NOT ISBLANK(R) && NOT ISBLANK(F) && NOT ISBLANK(M),
+    ROUND(R * 0.4 + F * 0.3 + M * 0.3, 2),
+    BLANK()
+)
+
+
+[Segmento RFM] =
+VAR R = [Score R (1-5)]
+VAR F = [Score F (1-5)]
+VAR M = [Score M (1-5)]
+RETURN
+SWITCH(
+    TRUE(),
+    ISBLANK(R),                             "Sem dados",
+    R >= 4 && F >= 4 && M >= 4,             "⭐ Campeões",
+    R >= 4 && (F >= 3 OR M >= 3),           "💛 Clientes Fiéis",
+    R >= 3 && F >= 3,                       "🔄 Potenciais Fiéis",
+    R >= 4 && F <= 2,                       "🆕 Novos Clientes",
+    R >= 3 && F <= 2 && M >= 3,             "💎 Alto Valor Recente",
+    R = 3 && F >= 3,                        "📈 Precisam de Atenção",
+    R <= 2 && F >= 3 && M >= 3,             "😴 Em Risco",
+    R <= 2 && F >= 4 && M >= 4,             "🆘 Campeões Perdidos",
+    R <= 2 && F <= 2 && M >= 3,             "💤 Hibernando",
+    R <= 1,                                 "❄️ Perdidos",
+    /* else */                              "🔍 Em Análise"
+)
+
+
+// ────────────────────────────────────────────────────────────
+// AGREGAÇÕES POR SEGMENTO (para análise de portfólio)
+// ────────────────────────────────────────────────────────────
+
+[Nº Clientes no Segmento] =
+CALCULATE(
+    DISTINCTCOUNT(dClientes[id_cliente]),
+    ALLEXCEPT(fRFM, fRFM[segmento_rfm])
+)
+
+
+[% Clientes no Segmento] =
+DIVIDE(
+    [Nº Clientes no Segmento],
+    CALCULATE(DISTINCTCOUNT(dClientes[id_cliente]), ALL(fRFM))
+)
+
+
+[Receita do Segmento] =
+SUMX(
+    FILTER(
+        VALUES(dClientes[id_cliente]),
+        NOT ISBLANK([Segmento RFM])
+    ),
+    [M — Receita Total]
+)
+
+
+[% Receita do Segmento] =
+DIVIDE(
+    [Receita do Segmento],
+    CALCULATE([M — Receita Total], ALL(fRFM))
+)
