@@ -2,6 +2,8 @@
 
 > Painel executivo de indicadores macroeconômicos brasileiros com análise histórica, tendências e semáforo de situação — construído com Power BI, DAX avançado e dados da API do Banco Central e IBGE.
 
+> **Status:** medidas DAX e SQL prontos para revisão. O arquivo do Power BI e os prints do dashboard estão em construção.
+
 ![Power BI](https://img.shields.io/badge/Power%20BI-F2C811?style=flat-square&logo=powerbi&logoColor=black)
 ![DAX](https://img.shields.io/badge/DAX-0078D4?style=flat-square&logo=microsoft&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)
@@ -52,11 +54,7 @@ projeto-01-economia-br/
 ├── queries/
 │   └── economia_setup.sql        ← DDL + views + queries analíticas
 └── docs/
-    ├── dicionario_dados.md       ← Documentação completa do modelo
-    └── screenshots/              ← Prints do dashboard
-        ├── 01_visao_geral.png
-        ├── 02_inflacao_historica.png
-        └── 03_comparativo_selic_ipca.png
+    └── dicionario_dados.md       ← Documentação completa do modelo
 ```
 
 ---
@@ -103,15 +101,14 @@ SWITCH(TRUE(),
 
 ---
 
-## ▶️ Como Reproduzir
+## ▶️ Como usar os scripts
 
 ```bash
 # 1. Configure o banco PostgreSQL (ver queries/economia_setup.sql)
 psql -U postgres -d sua_base -f queries/economia_setup.sql
 
-# 2. Execute o ETL Python para popular os dados
-cd ../../etl-pipeline-dados-abertos
-python src/pipeline.py --source bcb ibge --indicadores ipca selic desemprego pib cambio
+# 2. Popule fato_indicadores com as séries do IBGE e do Banco Central
+#    (carga automatizada em desenvolvimento no repo etl-pipeline-dados-abertos)
 
 # 3. Conecte o Power BI Desktop ao PostgreSQL
 #    Home → Get Data → PostgreSQL
