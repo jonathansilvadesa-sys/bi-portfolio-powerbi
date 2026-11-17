@@ -2,6 +2,8 @@
 
 > Dashboard de e-commerce completo usando o dataset público Olist (100k pedidos reais). Análise de receita, logística, satisfação e segmentação de clientes por RFM — com DAX avançado, Power Query M e modelagem dimensional.
 
+> **Status:** scripts de Power Query e medidas DAX prontos para revisão. O arquivo do Power BI e os prints do dashboard estão em construção.
+
 ![Power BI](https://img.shields.io/badge/Power%20BI-F2C811?style=flat-square&logo=powerbi&logoColor=black)
 ![DAX](https://img.shields.io/badge/DAX-0078D4?style=flat-square&logo=microsoft&logoColor=white)
 ![Power Query](https://img.shields.io/badge/Power%20Query-217346?style=flat-square&logo=microsoft&logoColor=white)
@@ -40,7 +42,7 @@ Demonstrar um ciclo completo de BI: **ETL com Power Query → Modelagem estrela 
 
 ---
 
-## 📊 Páginas do Dashboard
+## 📊 Páginas planejadas para o dashboard
 
 ### Página 1 — Performance de Vendas
 | Visual | Descrição |
@@ -87,12 +89,7 @@ projeto-03-ecommerce/
 ├── powerquery/
 │   └── transformacoes_olist.m   ← ETL para 3 tabelas principais do dataset
 └── docs/
-    ├── dicionario_dados.md
-    └── screenshots/
-        ├── 01_performance_vendas.png
-        ├── 02_logistica.png
-        ├── 03_nps_satisfacao.png
-        └── 04_rfm_segmentacao.png
+    └── dicionario_dados.md
 ```
 
 ---
@@ -123,7 +120,7 @@ SWITCH(TRUE(),
 
 ---
 
-## ▶️ Como Reproduzir
+## ▶️ Como usar os scripts
 
 ```bash
 # 1. Baixe o dataset do Kaggle

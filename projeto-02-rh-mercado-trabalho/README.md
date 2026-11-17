@@ -2,6 +2,8 @@
 
 > Dashboard de análise de empregabilidade usando dados reais do CAGED (Ministério do Trabalho). Saldo de empregos, rotatividade setorial, análise salarial e sazonalidade — com Power Query M e DAX avançado.
 
+> **Status:** scripts de Power Query e medidas DAX prontos para revisão. O arquivo do Power BI e os prints do dashboard estão em construção.
+
 ![Power BI](https://img.shields.io/badge/Power%20BI-F2C811?style=flat-square&logo=powerbi&logoColor=black)
 ![Power Query](https://img.shields.io/badge/Power%20Query-217346?style=flat-square&logo=microsoft&logoColor=white)
 ![DAX](https://img.shields.io/badge/DAX-0078D4?style=flat-square&logo=microsoft&logoColor=white)
@@ -31,7 +33,7 @@ fCaged ──── dLocalidade (UF, Região)
 
 ---
 
-## 📊 Análises do Dashboard
+## 📊 Páginas planejadas para o dashboard
 
 ### Página 1 — Visão Geral
 - KPI: Saldo total, Admissões, Desligamentos, Taxa de Rotatividade
@@ -58,14 +60,8 @@ fCaged ──── dLocalidade (UF, Região)
 projeto-02-rh-mercado-trabalho/
 ├── powerquery/
 │   └── transformacoes_caged.m    ← ETL completo (3 queries documentadas)
-├── dax/
-│   └── medidas_rh.dax            ← 20+ medidas (saldo, rotatividade, ranking)
-└── docs/
-    ├── dicionario_dados.md
-    └── screenshots/
-        ├── 01_visao_geral.png
-        ├── 02_analise_salarial.png
-        └── 03_sazonalidade.png
+└── dax/
+    └── medidas_rh.dax            ← 20+ medidas (saldo, sazonalidade, ranking)
 ```
 
 ---
@@ -109,7 +105,7 @@ RETURN DIVIDE([Total Admissões], MediaHistorica)
 
 ---
 
-## ▶️ Como Reproduzir
+## ▶️ Como usar os scripts
 
 ```bash
 # 1. Baixar o CAGED (dados abertos)

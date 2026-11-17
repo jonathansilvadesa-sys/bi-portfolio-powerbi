@@ -2,6 +2,8 @@
 
 > Coleção de projetos de Business Intelligence desenvolvidos com Power BI, DAX avançado e Power Query. Cada projeto usa dados públicos para demonstrar as mesmas técnicas aplicadas em contextos corporativos reais.
 
+> **Status:** scripts de Power Query, medidas DAX e SQL prontos para revisão. O arquivo do Power BI e os prints do dashboard estão em construção.
+
 ![Power BI](https://img.shields.io/badge/Power%20BI-F2C811?style=flat-square&logo=powerbi&logoColor=black)
 ![DAX](https://img.shields.io/badge/DAX-0078D4?style=flat-square&logo=microsoft&logoColor=white)
 ![Power Query](https://img.shields.io/badge/Power%20Query-217346?style=flat-square&logo=microsoft&logoColor=white)
@@ -142,35 +144,25 @@ CategoriaSegmento = Table.AddColumn(
 bi-portfolio-powerbi/
 │
 ├── projeto-01-economia-br/
-│   ├── modelo/
-│   │   └── economia_br.bim          # Definição do modelo (Tabular Editor)
-│   ├── queries/
-│   │   └── economia_setup.sql       # SQL para preparar os dados
-│   ├── docs/
-│   │   ├── screenshots/             # Prints dos dashboards
-│   │   └── dicionario_dados.md      # Documentação das métricas
+│   ├── dax/medidas_economia.dax          # Medidas de inflação, juros e emprego
+│   ├── queries/economia_setup.sql        # DDL do modelo estrela + view analítica
+│   ├── docs/dicionario_dados.md
 │   └── README.md
 │
 ├── projeto-02-rh-mercado-trabalho/
-│   ├── powerquery/
-│   │   └── transformacoes.m         # Scripts Power Query documentados
-│   ├── dax/
-│   │   └── medidas.dax             # Medidas DAX com comentários
-│   ├── docs/
-│   │   └── screenshots/
+│   ├── powerquery/transformacoes_caged.m # Tratamento do CAGED em Power Query
+│   ├── dax/medidas_rh.dax                # Saldo, sazonalidade, rankings, salários
 │   └── README.md
 │
 ├── projeto-03-ecommerce/
-│   ├── dax/
-│   │   └── rfm_analysis.dax        # Análise RFM completa em DAX
-│   ├── docs/
-│   │   └── screenshots/
+│   ├── powerquery/transformacoes_olist.m # Tratamento dos CSVs do Olist
+│   ├── dax/medidas_ecommerce.dax         # Vendas, logística e avaliações
+│   ├── dax/rfm_analysis.dax              # Segmentação RFM de clientes
+│   ├── docs/dicionario_dados.md
 │   └── README.md
 │
 └── README.md  ← você está aqui
 ```
-
-> **Nota sobre os arquivos .pbix:** Os dashboards Power BI completos podem ser solicitados por e-mail (jonathansilvadesa@gmail.com), pois os arquivos .pbix são grandes para versionamento no Git. Os scripts DAX, Power Query (M) e definições de modelo (.bim) estão todos versionados aqui.
 
 ---
 
