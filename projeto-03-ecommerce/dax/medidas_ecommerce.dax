@@ -1,205 +1,202 @@
 // ============================================================
 // PROJETO 03 — E-COMMERCE (Dataset Olist)
-// Arquivo: medidas_ecommerce.dax
-// Descrição: Medidas de performance de vendas, logística e satisfação
+// Calendário e medidas. Valores de conferência em docs/numeros_de_conferencia.md
 // Autor: Jonathan Silva de Sá
 // ============================================================
 
 
 // ────────────────────────────────────────────────────────────
-// RECEITA & VOLUME
+// TABELA CALCULADA: dCalendario
+// Modelagem > Nova tabela. Depois: Marcar como tabela de datas (coluna Data)
+// e classificar MesAno pela coluna AnoMesNum.
 // ────────────────────────────────────────────────────────────
-
-[Receita Total] =
-CALCULATE(
-    SUMX(fItens, fItens[valor_item] + fItens[frete_valor]),
-    fPedidos[status_pedido] = "delivered"
-)
-
-
-[Nº Pedidos] =
-CALCULATE(
-    DISTINCTCOUNT(fPedidos[id_pedido]),
-    fPedidos[status_pedido] = "delivered"
-)
-
-
-[Nº Clientes Únicos] =
-DISTINCTCOUNT(fPedidos[id_cliente])
-
-
-[Ticket Médio] =
-DIVIDE([Receita Total], [Nº Pedidos])
-
-
-[Itens por Pedido] =
-DIVIDE(
-    CALCULATE(COUNTROWS(fItens), fPedidos[status_pedido] = "delivered"),
-    [Nº Pedidos]
+dCalendario =
+ADDCOLUMNS (
+    SELECTCOLUMNS ( CALENDAR ( DATE ( 2017, 1, 1 ), DATE ( 2018, 8, 31 ) ), "Data", [Date] ),
+    "Ano", YEAR ( [Data] ),
+    "Trimestre", "T" & QUARTER ( [Data] ),
+    "MesNum", MONTH ( [Data] ),
+    "Mes", FORMAT ( [Data], "mmm", "pt-BR" ),
+    "MesAno", FORMAT ( [Data], "mmm/yy", "pt-BR" ),
+    "AnoMesNum", YEAR ( [Data] ) * 100 + MONTH ( [Data] ),
+    "DiaSemana", FORMAT ( [Data], "ddd", "pt-BR" ),
+    "DiaSemanaNum", WEEKDAY ( [Data], 2 )
 )
 
 
 // ────────────────────────────────────────────────────────────
-// COMPARATIVOS TEMPORAIS
+// RECEITA E VOLUME
+// Receita = preço + frete dos itens de pedidos válidos
+// (sem cancelados e indisponíveis). Uma única definição para o modelo todo.
 // ────────────────────────────────────────────────────────────
 
-[Receita MoM %] =
-VAR Atual    = [Receita Total]
-VAR Anterior = CALCULATE([Receita Total], DATEADD(dCalendario[Data], -1, MONTH))
-RETURN
-DIVIDE(Atual - Anterior, ABS(Anterior))
+Receita =
+CALCULATE ( SUM ( fItens[receita] ), fItens[pedido_valido] = TRUE () )
 
+Receita Produtos =
+CALCULATE ( SUM ( fItens[valor_produto] ), fItens[pedido_valido] = TRUE () )
 
-[Receita YoY %] =
-VAR Atual    = [Receita Total]
-VAR Anterior = CALCULATE([Receita Total], SAMEPERIODLASTYEAR(dCalendario[Data]))
-RETURN
-DIVIDE(Atual - Anterior, ABS(Anterior))
+Receita Frete =
+CALCULATE ( SUM ( fItens[valor_frete] ), fItens[pedido_valido] = TRUE () )
 
+% Frete na Receita =
+DIVIDE ( [Receita Frete], [Receita] )
 
-[Pedidos MoM %] =
-VAR Atual    = [Nº Pedidos]
-VAR Anterior = CALCULATE([Nº Pedidos], DATEADD(dCalendario[Data], -1, MONTH))
-RETURN
-DIVIDE(Atual - Anterior, ABS(Anterior))
+Pedidos =
+CALCULATE ( DISTINCTCOUNT ( fPedidos[id_pedido] ), fPedidos[pedido_valido] = TRUE () )
 
+// Ticket médio divide pelos pedidos que têm itens (5 pedidos válidos não têm)
+Pedidos com Itens =
+CALCULATE ( DISTINCTCOUNT ( fItens[id_pedido] ), fItens[pedido_valido] = TRUE () )
 
-[Receita Acumulada Ano] =
-CALCULATE([Receita Total], DATESYTD(dCalendario[Data]))
+Ticket Medio =
+DIVIDE ( [Receita], [Pedidos com Itens] )
 
+Pedidos Cancelados =
+CALCULATE ( COUNTROWS ( fPedidos ), fPedidos[pedido_valido] = FALSE () )
 
-[Receita MA3M] =
-AVERAGEX(
-    DATESINPERIOD(dCalendario[Data], LASTDATE(dCalendario[Data]), -3, MONTH),
-    [Receita Total]
-)
-
-
-// ────────────────────────────────────────────────────────────
-// MARKET SHARE POR CATEGORIA
-// ────────────────────────────────────────────────────────────
-
-[% Market Share Categoria] =
-DIVIDE(
-    [Receita Total],
-    CALCULATE([Receita Total], ALLSELECTED(dProduto[Categoria]))
-)
-
-
-[Ranking Categoria] =
-RANKX(
-    ALLSELECTED(dProduto[Categoria]),
-    [Receita Total],
-    ,
-    DESC,
-    DENSE
-)
+% Cancelamento =
+DIVIDE ( [Pedidos Cancelados], COUNTROWS ( fPedidos ) )
 
 
 // ────────────────────────────────────────────────────────────
-// LOGÍSTICA E ENTREGA
+// CLIENTES E RECOMPRA
+// Cliente = id_cliente_unico (customer_unique_id). O customer_id do
+// dataset muda a cada pedido e faria todo cliente parecer novo.
 // ────────────────────────────────────────────────────────────
 
-[Prazo Médio Entrega (dias)] =
-AVERAGEX(
-    FILTER(
-        fPedidos,
-        NOT ISBLANK(fPedidos[data_entrega]) &&
-        fPedidos[status_pedido] = "delivered"
-    ),
-    INT(fPedidos[data_entrega] - fPedidos[data_pedido])
-)
+Clientes =
+CALCULATE ( DISTINCTCOUNT ( fPedidos[id_cliente_unico] ), fPedidos[pedido_valido] = TRUE () )
 
-
-[Prazo Prometido Médio (dias)] =
-AVERAGEX(
-    FILTER(fPedidos, NOT ISBLANK(fPedidos[data_estimada_entrega])),
-    INT(fPedidos[data_estimada_entrega] - fPedidos[data_pedido])
-)
-
-
-[% Entregas no Prazo] =
-VAR EntregasNoPrazo =
-    CALCULATE(
-        COUNTROWS(fPedidos),
-        fPedidos[status_pedido] = "delivered",
-        fPedidos[data_entrega] <= fPedidos[data_estimada_entrega]
+Clientes Recorrentes =
+COUNTROWS (
+    FILTER (
+        VALUES ( fPedidos[id_cliente_unico] ),
+        CALCULATE ( DISTINCTCOUNT ( fPedidos[id_pedido] ), fPedidos[pedido_valido] = TRUE () ) >= 2
     )
-VAR TotalEntregues =
-    CALCULATE(COUNTROWS(fPedidos), fPedidos[status_pedido] = "delivered")
+)
+
+Taxa de Recompra =
+DIVIDE ( [Clientes Recorrentes], [Clientes] )
+
+Pedidos por Cliente =
+DIVIDE ( [Pedidos], [Clientes] )
+
+
+// ────────────────────────────────────────────────────────────
+// TEMPO
+// ────────────────────────────────────────────────────────────
+
+Receita Ano Anterior =
+CALCULATE ( [Receita], SAMEPERIODLASTYEAR ( dCalendario[Data] ) )
+
+// Só calcula quando o período inteiro do ano anterior está na janela
+Crescimento vs Ano Anterior =
+VAR Atual = [Receita]
+VAR Anterior = [Receita Ano Anterior]
 RETURN
-DIVIDE(EntregasNoPrazo, TotalEntregues)
+    IF ( NOT ISBLANK ( Anterior ), DIVIDE ( Atual - Anterior, Anterior ) )
 
+Receita Acumulada no Ano =
+TOTALYTD ( [Receita], dCalendario[Data] )
 
-[Atraso Médio (dias)] =
-AVERAGEX(
-    FILTER(
-        fPedidos,
-        fPedidos[status_pedido] = "delivered" &&
-        fPedidos[data_entrega] > fPedidos[data_estimada_entrega]
-    ),
-    INT(fPedidos[data_entrega] - fPedidos[data_estimada_entrega])
-)
-
-
-// ────────────────────────────────────────────────────────────
-// SATISFAÇÃO (NPS / Review Score)
-// ────────────────────────────────────────────────────────────
-
-[Nota Média Avaliação] =
-AVERAGE(fAvaliacoes[nota])
-
-
-[% Avaliações 5 Estrelas] =
-DIVIDE(
-    CALCULATE(COUNTROWS(fAvaliacoes), fAvaliacoes[nota] = 5),
-    COUNTROWS(fAvaliacoes)
-)
-
-
-[% Avaliações 1-2 Estrelas] =
-DIVIDE(
-    CALCULATE(COUNTROWS(fAvaliacoes), fAvaliacoes[nota] <= 2),
-    COUNTROWS(fAvaliacoes)
-)
-
-
-[NPS Score Aproximado] =
-// NPS = % Promotores (nota 5) - % Detratores (notas 1-2)
-VAR PctPromotor  = [% Avaliações 5 Estrelas]
-VAR PctDetrator  = [% Avaliações 1-2 Estrelas]
+// Média móvel de 3 MESES: itera os meses, não os dias.
+// AVERAGEX sobre DATESINPERIOD faria a média de ~90 dias.
+Receita Media Movel 3M =
+VAR Janela =
+    DATESINPERIOD ( dCalendario[Data], MAX ( dCalendario[Data] ), -3, MONTH )
+VAR MesesNaJanela =
+    CALCULATE ( DISTINCTCOUNT ( dCalendario[AnoMesNum] ), Janela )
 RETURN
-ROUND((PctPromotor - PctDetrator) * 100, 1)
+    IF (
+        MesesNaJanela = 3,     // nos 2 primeiros meses da janela não há 3 meses para a média
+        CALCULATE ( AVERAGEX ( VALUES ( dCalendario[AnoMesNum] ), [Receita] ), Janela )
+    )
 
 
 // ────────────────────────────────────────────────────────────
-// CORRELAÇÃO PRAZO × SATISFAÇÃO (tabela para scatter plot)
+// CATEGORIAS E ESTADOS
 // ────────────────────────────────────────────────────────────
 
-[Prazo Entrega para Scatter] =
-AVERAGEX(
-    FILTER(
-        fPedidos,
-        fPedidos[status_pedido] = "delivered"
-    ),
-    INT(fPedidos[data_entrega] - fPedidos[data_pedido])
+% Receita no Total Selecionado =
+DIVIDE ( [Receita], CALCULATE ( [Receita], ALLSELECTED ( dProdutos[categoria] ) ) )
+
+Ranking Categoria =
+IF (
+    HASONEVALUE ( dProdutos[categoria] ),
+    RANKX ( ALLSELECTED ( dProdutos[categoria] ), [Receita], , DESC, DENSE )
 )
 
 
 // ────────────────────────────────────────────────────────────
-// TEXTOS DINÂMICOS
+// LOGÍSTICA
+// Entregas = pedidos com status "delivered" e data de entrega preenchida.
 // ────────────────────────────────────────────────────────────
 
-[Label Receita Card] =
-"R$ " & FORMAT([Receita Total] / 1000000, "#,##0.0") & "M"
+Entregas =
+CALCULATE (
+    COUNTROWS ( fPedidos ),
+    fPedidos[status_pedido] = "delivered",
+    NOT ISBLANK ( fPedidos[data_entrega] )
+)
+
+Prazo Medio de Entrega (dias) =
+CALCULATE (
+    AVERAGE ( fPedidos[dias_ate_entrega] ),
+    fPedidos[status_pedido] = "delivered",
+    NOT ISBLANK ( fPedidos[data_entrega] )
+)
+
+% Entregue no Prazo =
+DIVIDE (
+    CALCULATE ( [Entregas], fPedidos[entregue_no_prazo] = TRUE () ),
+    [Entregas]
+)
 
 
-[Label MoM Receita] =
-VAR Var = [Receita MoM %]
-VAR Sinal = IF(Var >= 0, "▲ +", "▼ ")
-RETURN
-IF(NOT ISBLANK(Var), Sinal & FORMAT(ABS(Var), "0.0%") & " vs mês anterior", "")
+// ────────────────────────────────────────────────────────────
+// SATISFAÇÃO
+// A nota do Olist vai de 1 a 5, então não é NPS (que usa 0 a 10).
+// ────────────────────────────────────────────────────────────
+
+Nota Media =
+CALCULATE ( AVERAGE ( fPedidos[nota_avaliacao] ), fPedidos[pedido_valido] = TRUE () )
+
+Pedidos Avaliados =
+CALCULATE (
+    COUNTROWS ( fPedidos ),
+    fPedidos[pedido_valido] = TRUE (),
+    NOT ISBLANK ( fPedidos[nota_avaliacao] )
+)
+
+% Nota 5 =
+DIVIDE ( CALCULATE ( [Pedidos Avaliados], fPedidos[nota_avaliacao] = 5 ), [Pedidos Avaliados] )
+
+% Notas 1 e 2 =
+DIVIDE ( CALCULATE ( [Pedidos Avaliados], fPedidos[nota_avaliacao] <= 2 ), [Pedidos Avaliados] )
+
+Nota Media no Prazo =
+CALCULATE (
+    AVERAGE ( fPedidos[nota_avaliacao] ),
+    fPedidos[status_pedido] = "delivered",
+    fPedidos[entregue_no_prazo] = TRUE ()
+)
+
+Nota Media com Atraso =
+CALCULATE (
+    AVERAGE ( fPedidos[nota_avaliacao] ),
+    fPedidos[status_pedido] = "delivered",
+    fPedidos[entregue_no_prazo] = FALSE ()
+)
 
 
-[Label Prazo Entrega] =
-FORMAT([Prazo Médio Entrega (dias)], "0.0") & " dias em média"
+// ────────────────────────────────────────────────────────────
+// TEXTOS PARA CARTÕES E TÍTULOS
+// ────────────────────────────────────────────────────────────
+
+Titulo Atraso =
+"Atraso derruba a nota de " & FORMAT ( [Nota Media no Prazo], "0.0" ) & " para "
+    & FORMAT ( [Nota Media com Atraso], "0.0" )
+
+Titulo Recompra =
+FORMAT ( 1 - [Taxa de Recompra], "0%" ) & " dos clientes compraram uma única vez"
