@@ -50,13 +50,14 @@ Painel de People Analytics usando dados públicos do CAGED (Ministério do Traba
 Análise completa de desempenho de vendas usando dataset público do Olist (e-commerce brasileiro).
 
 **Dados:** [Olist Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) — Kaggle
-**Técnicas:** Modelagem dimensional, RFM Analysis em DAX, mapa de calor geográfico
+**Técnicas:** modelo estrela, RFM como tabela calculada em DAX, médias móveis e comparação com o ano anterior
 
-**Análises:**
-- Revenue, ticket médio e crescimento MoM
-- Análise RFM de clientes (Recência, Frequência, Monetário)
-- Performance por categoria e estado
-- Tempo médio de entrega vs satisfação
+**Status:** modelo e medidas prontos e conferidos contra os dados em Python; dashboard em montagem.
+
+**Achados:**
+- R$ 15,7 mi de receita em 97.910 pedidos (jan/2017 a ago/2018), +140% de jan a ago/2018 contra 2017
+- 97% dos clientes compraram uma única vez: a taxa de recompra é de 3%
+- Pedidos atrasados têm nota média 2,3, contra 4,3 dos entregues no prazo
 
 ---
 
@@ -158,6 +159,8 @@ bi-portfolio-powerbi/
 │   ├── powerquery/transformacoes_olist.m # Tratamento dos CSVs do Olist
 │   ├── dax/medidas_ecommerce.dax         # Vendas, logística e avaliações
 │   ├── dax/rfm_analysis.dax              # Segmentação RFM de clientes
+│   ├── docs/roteiro_dashboard.md         # Passo a passo de montagem das 4 páginas
+│   ├── docs/numeros_de_conferencia.md    # Valor esperado de cada medida
 │   ├── docs/dicionario_dados.md
 │   └── README.md
 │
